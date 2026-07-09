@@ -6,3 +6,6 @@ venv/
 vagas.db
 *.log
 .DS_Store
+
+# api-vagas (Meu Padrinho) é um serviço Node separado, clonado à parte.
+api-vagas/

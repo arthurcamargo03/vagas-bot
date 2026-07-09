@@ -140,6 +140,78 @@ def buscar_vagas_gupy(keyword: str) -> list[VagaEncontrada]:
     return vagas
 
 
+def buscar_vagas_remotive(keyword: str, limite: int = 30) -> list[VagaEncontrada]:
+    """
+    Busca vagas na Remotive (https://remotive.com) via API JSON pública.
+
+    Diferente de Indeed/Gupy, a Remotive expõe um endpoint REST estável e
+    sem proteção anti-bot, então esta é a fonte mais confiável do bot.
+    As vagas são majoritariamente remotas/globais (bom para quem aceita
+    trabalho remoto), o que complementa o scraping de vagas nacionais.
+    """
+    vagas: list[VagaEncontrada] = []
+    url = "https://remotive.com/api/remote-jobs"
+    params = {"search": keyword, "limit": limite}
+
+    resp = _requisitar(url, params=params)
+    if resp is None:
+        return vagas
+
+    try:
+        payload = resp.json()
+    except ValueError as e:
+        logger.error("Remotive retornou resposta não-JSON: %s", e)
+        return vagas
+
+    for item in payload.get("jobs", []):
+        try:
+            vagas.append(
+                VagaEncontrada(
+                    titulo=item["title"],
+                    empresa=item.get("company_name", "Empresa não informada"),
+                    link=item["url"],
+                    fonte="remotive",
+                )
+            )
+        except (KeyError, TypeError) as e:
+            logger.warning("Erro ao parsear uma vaga da Remotive: %s", e)
+            continue
+
+    logger.info("Remotive: %d vagas encontradas para '%s'", len(vagas), keyword)
+    return vagas
+
+
+def buscar_todas_vagas(keyword: str) -> list[VagaEncontrada]:
+    """
+    Agrega todas as fontes de vagas numa lista única.
+
+    Cada fonte é best-effort: se uma falhar (anti-bot, HTML mudou, timeout),
+    ela retorna lista vazia e as demais continuam — o ciclo nunca cai por
+    causa de uma fonte só.
+    """
+    # Import tardio para evitar ciclo de import (jobs_api_client importa este módulo).
+    from src.config import Config
+    from src.jobs_api_client import buscar_vagas_api
+
+    vagas: list[VagaEncontrada] = []
+
+    # Fonte PRINCIPAL: api-vagas (Meu Padrinho) — estágio BR de verdade.
+    try:
+        vagas.extend(buscar_vagas_api(Config.JOBS_API_BASE_URL))
+    except Exception as e:
+        logger.error("Fonte api-vagas falhou por completo: %s", e)
+
+    # Fontes complementares (remotas/globais, best-effort).
+    for fonte in (buscar_vagas_remotive, buscar_vagas_indeed, buscar_vagas_gupy):
+        try:
+            vagas.extend(fonte(keyword))
+        except Exception as e:
+            logger.error("Fonte %s falhou por completo: %s", fonte.__name__, e)
+
+    logger.info("Total agregado: %d vagas de todas as fontes.", len(vagas))
+    return vagas
+
+
 def ver_html_bruto(url: str, params: dict | None = None) -> str:
     """Utilitário de debug: retorna o HTML bruto de uma URL para inspeção manual."""
     resp = _requisitar(url, params=params)

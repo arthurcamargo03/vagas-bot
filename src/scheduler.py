@@ -6,19 +6,25 @@ from apscheduler.schedulers.blocking import BlockingScheduler
 
 from src.config import Config
 from src.notifier import enviar_vaga
-from src.scraper import buscar_vagas_gupy, buscar_vagas_indeed
+from src.scraper import buscar_todas_vagas
 from src.storage import Vaga, inicializar_db, ja_foi_enviada, marcar_como_enviada
 
 logger = logging.getLogger(__name__)
 
+# Limite de vagas enviadas por ciclo. Evita floodar o canal quando o banco
+# está vazio (primeira execução) ou quando uma fonte devolve muita coisa.
+MAX_VAGAS_POR_CICLO = 8
+
 
 async def _processar_e_enviar_vagas() -> None:
-    todas_vagas = buscar_vagas_indeed(Config.SEARCH_KEYWORD) + buscar_vagas_gupy(
-        Config.SEARCH_KEYWORD
-    )
+    todas_vagas = buscar_todas_vagas(Config.SEARCH_KEYWORD)
 
     novas = 0
     for vaga in todas_vagas:
+        if novas >= MAX_VAGAS_POR_CICLO:
+            logger.info("Limite de %d vagas por ciclo atingido.", MAX_VAGAS_POR_CICLO)
+            break
+
         if ja_foi_enviada(Config.DB_PATH, vaga.link):
             continue
 
@@ -43,11 +49,13 @@ def iniciar_agendador() -> None:
     inicializar_db(Config.DB_PATH)
 
     scheduler = BlockingScheduler(timezone="America/Sao_Paulo")
+    # Sem next_run_time explícito: o APScheduler agenda o primeiro disparo para
+    # daqui a SCRAPE_INTERVAL_MINUTES. A execução imediata abaixo cobre o "agora",
+    # então não há disparo duplicado no arranque.
     scheduler.add_job(
         ciclo_de_verificacao,
         "interval",
         minutes=Config.SCRAPE_INTERVAL_MINUTES,
-        next_run_time=None,  # roda a primeira vez imediatamente, ver main.py
     )
 
     logger.info(
@@ -55,7 +63,7 @@ def iniciar_agendador() -> None:
         Config.SCRAPE_INTERVAL_MINUTES,
     )
 
-    # Primeira execução imediata, antes de esperar o primeiro intervalo
+    # Primeira execução imediata, antes de esperar o primeiro intervalo.
     ciclo_de_verificacao()
 
     scheduler.start()
