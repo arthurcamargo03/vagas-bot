@@ -20,9 +20,16 @@ def _formatar_mensagem(vaga: VagaEncontrada) -> str:
 
 
 async def enviar_vaga(bot_token: str, chat_id: str, vaga: VagaEncontrada) -> bool:
-    """Envia uma vaga para o canal/grupo do Telegram. Retorna True se enviou com sucesso."""
-    bot = Bot(token=bot_token)
+    """Envia uma vaga para o canal/grupo do Telegram. Retorna True se enviou com sucesso.
+
+    Nunca levanta exceção: token inválido, chat_id errado ou API fora do ar
+    resultam em log de erro + retorno False, para o ciclo do bot seguir e
+    tentar de novo no próximo intervalo.
+    """
     try:
+        # Bot() dentro do try de propósito: alguns formatos de token inválido
+        # podem falhar já na construção (InvalidToken), não só no envio.
+        bot = Bot(token=bot_token)
         await bot.send_message(
             chat_id=chat_id,
             text=_formatar_mensagem(vaga),
