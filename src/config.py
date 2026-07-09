@@ -19,6 +19,8 @@ class Config:
     # Slots do cap reservados só para fontes BR (api-vagas/Gupy/Indeed), para
     # estágio nacional nunca ser espremido pelas fontes globais (Remotive etc).
     RESERVA_VAGAS_BR = int(os.getenv("RESERVA_VAGAS_BR", "3"))
+    # Fuso do agendador. Default BR; override no deploy se a região mudar.
+    TIMEZONE = os.getenv("TIMEZONE", "America/Sao_Paulo")
 
     @classmethod
     def validar(cls) -> None:

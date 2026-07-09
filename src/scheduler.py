@@ -83,7 +83,7 @@ def iniciar_agendador() -> None:
     Config.validar()
     inicializar_db(Config.DB_PATH)
 
-    scheduler = BlockingScheduler(timezone="America/Sao_Paulo")
+    scheduler = BlockingScheduler(timezone=Config.TIMEZONE)
     # Sem next_run_time explícito: o APScheduler agenda o primeiro disparo para
     # daqui a SCRAPE_INTERVAL_MINUTES. A execução imediata abaixo cobre o "agora",
     # então não há disparo duplicado no arranque.
