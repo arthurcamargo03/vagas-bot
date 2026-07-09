@@ -1,13 +1,16 @@
-"""Orquestra o ciclo completo: raspar -> filtrar novas -> enviar -> agendar."""
+"""Orquestra UM ciclo do bot: raspar -> filtrar novas -> enviar -> marcar.
+
+O agendamento NÃO vive mais aqui: quem dispara os ciclos é o cron do GitHub
+Actions (um ciclo por execução do workflow). O antigo BlockingScheduler foi
+removido — só a lógica de orquestração de um ciclo continua, que é a parte útil.
+"""
 import asyncio
 import logging
-
-from apscheduler.schedulers.blocking import BlockingScheduler
 
 from src.config import Config
 from src.notifier import enviar_vaga
 from src.scraper import buscar_todas_vagas
-from src.storage import Vaga, inicializar_db, ja_foi_enviada, marcar_como_enviada
+from src.storage import Vaga, ja_foi_enviada, marcar_como_enviada
 
 logger = logging.getLogger(__name__)
 
@@ -67,38 +70,11 @@ async def _processar_e_enviar_vagas() -> None:
     )
 
 
-def ciclo_de_verificacao() -> None:
-    """Wrapper síncrono chamado pelo agendador (APScheduler não é async-nativo aqui).
+def executar_ciclo_unico() -> None:
+    """Executa exatamente UM ciclo (síncrono por fora, async por dentro).
 
-    Blinda o ciclo: qualquer erro inesperado é logado, mas NÃO derruba o
-    processo — o agendador segue e tenta de novo no próximo intervalo.
+    Não engole exceções: se algo crítico estourar aqui, propaga pro main.py,
+    que loga e sai com código 1. Falha de UMA fonte de vagas NÃO chega aqui —
+    já é tratada dentro de buscar_todas_vagas, então não derruba o ciclo.
     """
-    try:
-        asyncio.run(_processar_e_enviar_vagas())
-    except Exception:
-        logger.exception("Erro inesperado durante o ciclo de verificação (seguindo).")
-
-
-def iniciar_agendador() -> None:
-    Config.validar()
-    inicializar_db(Config.DB_PATH)
-
-    scheduler = BlockingScheduler(timezone=Config.TIMEZONE)
-    # Sem next_run_time explícito: o APScheduler agenda o primeiro disparo para
-    # daqui a SCRAPE_INTERVAL_MINUTES. A execução imediata abaixo cobre o "agora",
-    # então não há disparo duplicado no arranque.
-    scheduler.add_job(
-        ciclo_de_verificacao,
-        "interval",
-        minutes=Config.SCRAPE_INTERVAL_MINUTES,
-    )
-
-    logger.info(
-        "Agendador iniciado. Verificando vagas a cada %d minutos.",
-        Config.SCRAPE_INTERVAL_MINUTES,
-    )
-
-    # Primeira execução imediata, antes de esperar o primeiro intervalo.
-    ciclo_de_verificacao()
-
-    scheduler.start()
+    asyncio.run(_processar_e_enviar_vagas())

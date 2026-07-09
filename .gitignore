@@ -3,7 +3,6 @@ __pycache__/
 *.pyc
 venv/
 .venv/
-vagas.db
 *.log
 .DS_Store
 

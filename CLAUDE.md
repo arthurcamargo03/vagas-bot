@@ -18,7 +18,11 @@ de vagas para comunidades de estudantes de TI).
   brasileiro). Escolhida porque Indeed (403 anti-bot) e Gupy (SPA + API só com
   token enterprise) não dão pra raspar de forma confiável e barata.
   - Roda como **serviço separado** (Docker ou `node index.js`), NÃO é
-    biblioteca Python. Clonado em `api-vagas/` (fora do nosso git).
+    biblioteca Python. Clonado em `api-vagas/` (fora do nosso git, continua
+    no `.gitignore` — é um repo próprio, não um submódulo).
+  - **Fork próprio:** https://github.com/arthurcamargo03/api-vagas (upstream:
+    matheusaudibert/jobs-api). O deploy usa o fork; o `index.js` foi ajustado
+    pra ler `process.env.PORT` e há um `render.yaml` no fork.
   - Rotas GET: `/estagio`, `/junior`, `/pleno`, `/senior` — cada uma devolve
     só UMA vaga (a mais recente). O dedup por link no SQLite cuida do resto.
   - URL configurada via `JOBS_API_BASE_URL` no `.env`
@@ -30,9 +34,26 @@ de vagas para comunidades de estudantes de TI).
   (retornam vazio quando bloqueiam). NUNCA LinkedIn (ToS + anti-bot pesado).
 - Controle de vagas já enviadas: **SQLite** (não JSON) — mais robusto pra
   crescer e evita duplicatas de forma mais segura.
-- Agendamento: `APScheduler` (não `schedule` puro) — mais flexível pra
-  rodar em produção (Railway/Render).
-- Deploy alvo: Railway.app ou Render.com (free tier, roda 24h).
+- Agendamento: **externo, via cron do GitHub Actions** — o `main.py` roda UM
+  ciclo e sai (não há mais loop/BlockingScheduler). Escolhido porque cobre a
+  tarefa periódica de graça (Actions é ilimitado em repo público), evitando o
+  custo de um processo 24h.
+
+## Arquitetura de deploy (final)
+- **api-vagas → Render (Web Service, free tier).** Precisa ser Web Service, não
+  Background Worker, porque o bot o consome via HTTP. Trade-off: free tier dorme
+  após ~15 min (cold start ~1 min), tratado em `jobs_api_client.py` com timeout
+  de 60s na 1ª tentativa + retry.
+- **bot Python → GitHub Actions (cron, 1 ciclo por execução, a cada 2h).** Não
+  vira Background Worker no Render porque isso é pago ($7/mês); Actions faz o
+  agendamento de graça.
+- **Persistência do dedup:** o ambiente do Actions é efêmero, então o
+  `.github/workflows/rodar-bot.yml` commita o `vagas.db` de volta no repo —
+  apenas quando muda (i.e., quando houve vaga nova), com `[skip ci]`. Por isso o
+  `vagas.db` saiu do `.gitignore` (precisa ser rastreado).
+- **Conexão entre os dois:** o bot recebe `JOBS_API_BASE_URL` como GitHub Secret,
+  apontando pra URL pública do api-vagas no Render (`https://api-vagas-xxxx.onrender.com`).
+- Secrets do Actions: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `JOBS_API_BASE_URL`.
 
 ## Riscos conhecidos (não ignorar)
 - Indeed e Gupy têm proteção anti-bot (Cloudflare, rate limiting). Usar
@@ -44,7 +65,7 @@ de vagas para comunidades de estudantes de TI).
 ## Stack
 - `requests` + `BeautifulSoup4` — scraping
 - `python-telegram-bot` — postagem no Telegram
-- `APScheduler` — agendamento
+- GitHub Actions (cron) — agendamento externo (era `APScheduler`, removido)
 - `sqlite3` (stdlib) — controle de vagas já enviadas
 - `python-dotenv` — variáveis de ambiente (token do bot, chat_id)
 

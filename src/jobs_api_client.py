@@ -14,6 +14,7 @@ A URL base vem de JOBS_API_BASE_URL no .env (default http://localhost:3001),
 pra trocar fácil entre rodar local e deploy sem mexer no código.
 """
 import logging
+import time
 
 import requests
 
@@ -21,8 +22,37 @@ from src.scraper import VagaEncontrada
 
 logger = logging.getLogger(__name__)
 
+# 1ª tentativa usa timeout longo pra absorver o cold start do Render free tier
+# (Web Service dorme após ~15 min e leva ~1 min pra acordar). As tentativas
+# seguintes já pegam o serviço acordado, então usam o timeout normal.
+TIMEOUT_COLD_START_SEGUNDOS = 60
 TIMEOUT_SEGUNDOS = 15
+TENTATIVAS = 2
+ESPERA_ENTRE_TENTATIVAS_SEGUNDOS = 3
 FONTE = "meupadrinho"
+
+
+def _get_com_retry(url: str) -> requests.Response:
+    """GET tolerante a cold start: 1ª tentativa com timeout longo, retry curto.
+
+    Lança a última exceção se todas as tentativas falharem — quem chama trata.
+    """
+    ultimo_erro: Exception | None = None
+    for tentativa in range(1, TENTATIVAS + 1):
+        timeout = TIMEOUT_COLD_START_SEGUNDOS if tentativa == 1 else TIMEOUT_SEGUNDOS
+        try:
+            resp = requests.get(url, timeout=timeout)
+            resp.raise_for_status()
+            return resp
+        except requests.exceptions.RequestException as e:
+            ultimo_erro = e
+            if tentativa < TENTATIVAS:
+                logger.warning(
+                    "api-vagas tentativa %d/%d falhou em %s (%s). Retentando em %ds…",
+                    tentativa, TENTATIVAS, url, e, ESPERA_ENTRE_TENTATIVAS_SEGUNDOS,
+                )
+                time.sleep(ESPERA_ENTRE_TENTATIVAS_SEGUNDOS)
+    raise ultimo_erro  # type: ignore[misc]
 
 
 def _para_vaga(dados: dict) -> VagaEncontrada | None:
@@ -58,8 +88,7 @@ def buscar_vagas_api(
     for nivel in niveis:
         url = f"{base_url.rstrip('/')}/{nivel}"
         try:
-            resp = requests.get(url, timeout=TIMEOUT_SEGUNDOS)
-            resp.raise_for_status()
+            resp = _get_com_retry(url)
             vaga = _para_vaga(resp.json())
             if vaga:
                 vagas.append(vaga)
