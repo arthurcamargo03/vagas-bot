@@ -13,8 +13,21 @@ de vagas para comunidades de estudantes de TI).
 ## Decisões já tomadas
 - **Começar pelo Telegram**, não Discord (API mais simples, bot token via
   BotFather, sem precisa configurar servidor/webhook).
-- Fontes de scraping: **Indeed e Gupy**. NUNCA LinkedIn (bloqueia scraping
-  agressivamente e viola ToS de forma mais visada).
+- **Fonte PRINCIPAL de estágio BR: `api-vagas` (Meu Padrinho).** É a API Node
+  `matheusaudibert/jobs-api`, que agrega vagas do meupadrinho.com.br (mercado
+  brasileiro). Escolhida porque Indeed (403 anti-bot) e Gupy (SPA + API só com
+  token enterprise) não dão pra raspar de forma confiável e barata.
+  - Roda como **serviço separado** (Docker ou `node index.js`), NÃO é
+    biblioteca Python. Clonado em `api-vagas/` (fora do nosso git).
+  - Rotas GET: `/estagio`, `/junior`, `/pleno`, `/senior` — cada uma devolve
+    só UMA vaga (a mais recente). O dedup por link no SQLite cuida do resto.
+  - URL configurada via `JOBS_API_BASE_URL` no `.env`
+    (local: `http://localhost:3001`; deploy: URL pública do serviço).
+  - Consumida por `src/jobs_api_client.py`, que normaliza pro mesmo formato
+    (`VagaEncontrada`) das outras fontes e entra no mesmo pipeline.
+- Fontes complementares: **Remotive e Arbeitnow** (APIs JSON públicas, vagas
+  remotas/globais) — best-effort. Indeed e Gupy ficam como best-effort também
+  (retornam vazio quando bloqueiam). NUNCA LinkedIn (ToS + anti-bot pesado).
 - Controle de vagas já enviadas: **SQLite** (não JSON) — mais robusto pra
   crescer e evita duplicatas de forma mais segura.
 - Agendamento: `APScheduler` (não `schedule` puro) — mais flexível pra
