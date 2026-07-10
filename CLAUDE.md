@@ -6,9 +6,9 @@ automaticamente num canal do Telegram (e futuramente Discord), sem
 intervenção manual. Roda a cada 1-2h via agendador.
 
 ## Objetivo
-Projeto de portfólio (mostra scraping, API externa, agendamento, deploy)
-que também pode virar produto real (monetização via acesso pago a canal
-de vagas para comunidades de estudantes de TI).
+Projeto de portfólio que demonstra scraping, consumo de API externa,
+agendamento e deploy. Há possível exploração futura de um modelo de negócio,
+não detalhada aqui.
 
 ## Decisões já tomadas
 - **Começar pelo Telegram**, não Discord (API mais simples, bot token via
