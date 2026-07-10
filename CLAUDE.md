@@ -32,6 +32,30 @@ não detalhada aqui.
 - Fontes complementares: **Remotive e Arbeitnow** (APIs JSON públicas, vagas
   remotas/globais) — best-effort. Indeed e Gupy ficam como best-effort também
   (retornam vazio quando bloqueiam). NUNCA LinkedIn (ToS + anti-bot pesado).
+
+## Filtro de senioridade (fontes remotas)
+- **Por que existe:** a busca do Remotive é por texto solto, sem filtro de
+  nível — devolve muito senior/staff/lead/freelance misturado com o que
+  interessa (estágio/júnior). O api-vagas NÃO passa por esse filtro (já vem
+  como estágio BR de verdade).
+- **Onde:** `_filtrar_por_senioridade()` em `src/scraper.py`, aplicado no
+  retorno de `buscar_vagas_remotive` (reaproveitável se Arbeitnow for ligado).
+- **Regra por título (case-insensitive, palavra inteira via regex):**
+  - DESCARTA se contém: `senior`, `sênior`, `sr.`, `staff`, `lead`,
+    `principal`, `head of`, `manager`, `freelance`.
+  - ACEITA se contém: `intern`, `internship`, `estagio`, `estágio`, `junior`,
+    `júnior`, `jr.`, `entry level`, `entry-level`, `trainee`, `graduate`.
+  - **Descarte tem precedência** quando os dois aparecem (prioriza não soltar
+    sênior).
+- **Match por palavra inteira** (lookarounds, não substring) de propósito:
+  evita `intern` casar com "International" e `lead` com "Leadership".
+- **Decisão consciente sobre "ambíguo":** título que não bate em nenhuma lista
+  é MANTIDO (não descartado) e logado como ambíguo. Preferimos deixar passar
+  uma vaga sem palavra-chave óbvia (ex: "Frontend Developer") a perder vaga boa.
+  Custo aceito: alguns títulos genéricos/não-dev passam (o filtro é só de
+  senioridade, não de relevância de cargo).
+- **Log por ciclo:** `Remotive: N brutas → A aceitas + M ambíguas (mantidas)
+  + D descartadas`. Títulos de descartadas/ambíguas vão em nível DEBUG.
 - Controle de vagas já enviadas: **SQLite** (não JSON) — mais robusto pra
   crescer e evita duplicatas de forma mais segura.
 - Agendamento: **externo, via cron do GitHub Actions** — o `main.py` roda UM

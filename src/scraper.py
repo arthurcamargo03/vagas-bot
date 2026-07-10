@@ -8,6 +8,7 @@ proteção anti-bot — espere que isso quebre e precise de ajuste. Rode
 de funcionar.
 """
 import logging
+import re
 import time
 from dataclasses import dataclass
 
@@ -15,6 +16,75 @@ import requests
 from bs4 import BeautifulSoup
 
 logger = logging.getLogger(__name__)
+
+# --- Filtro de senioridade por título (fontes remotas/globais) ---------------
+# Remotive (e outras fontes remotas) busca por texto solto e devolve vagas de
+# qualquer nível. Como o canal é de estágio/júnior, filtramos por título:
+# palavras que indicam senioridade acima de júnior ou trabalho avulso.
+_TITULO_DESCARTE = (
+    "senior", "sênior", "sr.", "staff", "lead", "principal",
+    "head of", "manager", "freelance",
+)
+# Palavras que confirmam estágio/júnior/entrada — aceite explícito.
+_TITULO_ACEITE = (
+    "intern", "internship", "estagio", "estágio", "junior", "júnior",
+    "jr.", "entry level", "entry-level", "trainee", "graduate",
+)
+
+
+def _compilar_termos(termos: tuple[str, ...]) -> re.Pattern:
+    """Casa qualquer termo como palavra inteira (evita 'intern' em 'International'
+    ou 'lead' em 'Leadership'). Lookarounds toleram termos com ponto (sr./jr.)."""
+    alternativa = "|".join(re.escape(t) for t in termos)
+    return re.compile(rf"(?<!\w)(?:{alternativa})(?!\w)", re.IGNORECASE)
+
+
+_RE_DESCARTE = _compilar_termos(_TITULO_DESCARTE)
+_RE_ACEITE = _compilar_termos(_TITULO_ACEITE)
+
+
+def _classificar_titulo(titulo: str) -> str:
+    """Classifica um título: 'descartada' | 'aceita' | 'ambigua'.
+
+    Descarte tem precedência (prioriza NÃO soltar vaga sênior): se o título tem
+    tanto palavra de descarte quanto de aceite, descarta. 'ambigua' = não bate em
+    nenhuma lista — mantida de propósito pra não perder vaga boa sem palavra óbvia.
+    """
+    if _RE_DESCARTE.search(titulo):
+        return "descartada"
+    if _RE_ACEITE.search(titulo):
+        return "aceita"
+    return "ambigua"
+
+
+def _filtrar_por_senioridade(
+    vagas: list["VagaEncontrada"], fonte: str
+) -> list["VagaEncontrada"]:
+    """Descarta vagas claramente sênior/freelance; mantém aceitas + ambíguas.
+
+    Loga o balanço do ciclo pra fonte (brutas / aceitas / ambíguas / descartadas).
+    """
+    aceitas, ambiguas, descartadas = [], [], []
+    for vaga in vagas:
+        classe = _classificar_titulo(vaga.titulo)
+        if classe == "aceita":
+            aceitas.append(vaga)
+        elif classe == "ambigua":
+            ambiguas.append(vaga)
+        else:
+            descartadas.append(vaga)
+
+    logger.info(
+        "%s: %d vagas brutas → %d aceitas (júnior/estágio) + %d ambíguas (mantidas) "
+        "+ %d descartadas (senior/lead/freelance).",
+        fonte, len(vagas), len(aceitas), len(ambiguas), len(descartadas),
+    )
+    if descartadas:
+        logger.debug("%s descartadas: %s", fonte, [v.titulo for v in descartadas])
+    if ambiguas:
+        logger.debug("%s ambíguas (mantidas): %s", fonte, [v.titulo for v in ambiguas])
+
+    return aceitas + ambiguas
 
 HEADERS = {
     "User-Agent": (
@@ -177,8 +247,8 @@ def buscar_vagas_remotive(keyword: str, limite: int = 30) -> list[VagaEncontrada
             logger.warning("Erro ao parsear uma vaga da Remotive: %s", e)
             continue
 
-    logger.info("Remotive: %d vagas encontradas para '%s'", len(vagas), keyword)
-    return vagas
+    # Remotive não filtra por senioridade — aplicamos o filtro por título aqui.
+    return _filtrar_por_senioridade(vagas, "Remotive")
 
 
 def buscar_todas_vagas(keyword: str) -> list[VagaEncontrada]:
