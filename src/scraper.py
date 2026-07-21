@@ -214,10 +214,10 @@ def buscar_vagas_remotive(keyword: str, limite: int = 30) -> list[VagaEncontrada
     """
     Busca vagas na Remotive (https://remotive.com) via API JSON pública.
 
-    Diferente de Indeed/Gupy, a Remotive expõe um endpoint REST estável e
-    sem proteção anti-bot, então esta é a fonte mais confiável do bot.
-    As vagas são majoritariamente remotas/globais (bom para quem aceita
-    trabalho remoto), o que complementa o scraping de vagas nacionais.
+    DESPLUGADA de buscar_todas_vagas() desde 2026-07: a API pública passou a
+    ignorar o parâmetro `search` (qualquer termo devolve o mesmo feed fixo de
+    ~41 vagas recentes, com zero estágio no título). Mantida no módulo, e com o
+    filtro de senioridade aplicado, pra religar rápido se o search voltar.
     """
     vagas: list[VagaEncontrada] = []
     url = "https://remotive.com/api/remote-jobs"
@@ -271,8 +271,16 @@ def buscar_todas_vagas(keyword: str) -> list[VagaEncontrada]:
     except Exception as e:
         logger.error("Fonte api-vagas falhou por completo: %s", e)
 
-    # Fontes complementares (remotas/globais, best-effort).
-    for fonte in (buscar_vagas_remotive, buscar_vagas_indeed, buscar_vagas_gupy):
+    # Fonte Remotive DESPLUGADA (2026-07): a API pública passou a ignorar o
+    # parâmetro `search` e devolve um feed fixo de ~41 vagas recentes (qualquer
+    # termo, até string aleatória, retorna a MESMA lista) — dominado por
+    # senior/staff e com ZERO estágio no título. Só injetava ruído que o filtro
+    # tinha que suprimir. A função buscar_vagas_remotive() continua no módulo
+    # pra religar fácil se o Remotive voltar a ter busca real (é só readicioná-la
+    # à tupla abaixo). Ver CLAUDE.md → "Remotive desplugado".
+    #
+    # Fontes complementares (best-effort): retornam vazio quando bloqueiam.
+    for fonte in (buscar_vagas_indeed, buscar_vagas_gupy):
         try:
             vagas.extend(fonte(keyword))
         except Exception as e:

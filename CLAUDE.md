@@ -29,11 +29,32 @@ não detalhada aqui.
     (local: `http://localhost:3001`; deploy: URL pública do serviço).
   - Consumida por `src/jobs_api_client.py`, que normaliza pro mesmo formato
     (`VagaEncontrada`) das outras fontes e entra no mesmo pipeline.
-- Fontes complementares: **Remotive e Arbeitnow** (APIs JSON públicas, vagas
-  remotas/globais) — best-effort. Indeed e Gupy ficam como best-effort também
-  (retornam vazio quando bloqueiam). NUNCA LinkedIn (ToS + anti-bot pesado).
+- Fontes complementares: Indeed e Gupy — best-effort (retornam vazio quando
+  bloqueiam). NUNCA LinkedIn (ToS + anti-bot pesado).
+
+## Remotive desplugado (2026-07)
+- **O que aconteceu:** a API pública do Remotive
+  (`https://remotive.com/api/remote-jobs?search=…`) parou de respeitar o
+  parâmetro `search`. Testado: `intern`, `internship`, `estagio desenvolvimento`,
+  `python`, `nurse` e até uma string aleatória sem sentido devolvem **a MESMA
+  lista de 41 vagas** (`job-count: 41` como inventário total — o Remotive real
+  tem milhares). Ou seja, viraram um feed fixo das ~41 recentes, sem busca.
+- **Por que doeu:** dessas 41, **zero** têm estágio no título — é dominado por
+  `Senior/Staff/Head of/Tech Lead`. Como fonte "complementar" de estágio, secou:
+  só injetava ruído sênior que o filtro tinha que suprimir (e num ciclo ruim
+  vazava). O plano de apertar a query pra `intern` não resolveria nada, porque a
+  query é ignorada.
+- **Decisão:** `buscar_vagas_remotive()` foi **removida da tupla de fontes** em
+  `buscar_todas_vagas()` (opção "desplugar", não deletar). A função e o filtro de
+  senioridade continuam no módulo; religar é só readicioná-la à tupla. Se um dia
+  precisar de estágio remoto internacional, o caminho é uma fonte com busca real
+  (ex.: Arbeitnow), aí sim com ACCEPT estrito `intern`/`internship`.
+- **Fonte de estágio que sobra e funciona:** api-vagas (Meu Padrinho, BR nativo).
 
 ## Filtro de senioridade (fontes remotas)
+- **Estado atual: DORMENTE.** A única fonte que passava por ele era o Remotive,
+  agora desplugado (ver seção acima). Mantido no código, aplicado dentro de
+  `buscar_vagas_remotive()`, pronto pra quando entrar uma fonte remota nova.
 - **Por que existe:** a busca do Remotive é por texto solto, sem filtro de
   nível — devolve muito senior/staff/lead/freelance misturado com o que
   interessa (estágio/júnior). O api-vagas NÃO passa por esse filtro (já vem
