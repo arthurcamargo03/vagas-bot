@@ -259,17 +259,18 @@ def buscar_todas_vagas(keyword: str) -> list[VagaEncontrada]:
     ela retorna lista vazia e as demais continuam — o ciclo nunca cai por
     causa de uma fonte só.
     """
-    # Import tardio para evitar ciclo de import (jobs_api_client importa este módulo).
-    from src.config import Config
-    from src.jobs_api_client import buscar_vagas_api
+    # Import tardio para evitar ciclo de import (o cliente importa este módulo).
+    from src.meupadrinho_client import buscar_vagas_meupadrinho
 
     vagas: list[VagaEncontrada] = []
 
-    # Fonte PRINCIPAL: api-vagas (Meu Padrinho) — estágio BR de verdade.
+    # Fonte PRINCIPAL: Meu Padrinho (direto na API pública), já filtrado pra
+    # Curitiba+região (presencial/híbrido) e remoto Brasil. Substituiu o serviço
+    # api-vagas no Render (2026-07) — ver CLAUDE.md → "Meu Padrinho direto".
     try:
-        vagas.extend(buscar_vagas_api(Config.JOBS_API_BASE_URL))
+        vagas.extend(buscar_vagas_meupadrinho())
     except Exception as e:
-        logger.error("Fonte api-vagas falhou por completo: %s", e)
+        logger.error("Fonte Meu Padrinho falhou por completo: %s", e)
 
     # Fonte Remotive DESPLUGADA (2026-07): a API pública passou a ignorar o
     # parâmetro `search` e devolve um feed fixo de ~41 vagas recentes (qualquer

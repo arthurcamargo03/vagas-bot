@@ -13,6 +13,9 @@ não detalhada aqui.
 ## Decisões já tomadas
 - **Começar pelo Telegram**, não Discord (API mais simples, bot token via
   BotFather, sem precisa configurar servidor/webhook).
+- **[SUPERSEDIDO em 2026-07 — ver "Meu Padrinho direto" abaixo]** O bot agora bate
+  DIRETO na API do Meu Padrinho; o serviço `api-vagas` no Render saiu do pipeline
+  (redundante, pode desligar). O texto abaixo descreve o arranjo antigo.
 - **Fonte PRINCIPAL de estágio BR: `api-vagas` (Meu Padrinho).** É a API Node
   `matheusaudibert/jobs-api`, que agrega vagas do meupadrinho.com.br (mercado
   brasileiro). Escolhida porque Indeed (403 anti-bot) e Gupy (SPA + API só com
@@ -31,6 +34,32 @@ não detalhada aqui.
     (`VagaEncontrada`) das outras fontes e entra no mesmo pipeline.
 - Fontes complementares: Indeed e Gupy — best-effort (retornam vazio quando
   bloqueiam). NUNCA LinkedIn (ToS + anti-bot pesado).
+
+## Meu Padrinho direto (2026-07) — substitui o serviço api-vagas
+- **O que mudou:** o bot deixou de consumir o serviço `api-vagas` no Render e
+  passou a chamar DIRETO a API pública do Meu Padrinho
+  (`https://meupadrinho.com.br/api`), em `src/meupadrinho_client.py`. O antigo
+  `src/jobs_api_client.py` ficou deprecado (mantido de referência).
+- **Por que:** (1) sem cold start — o Meu Padrinho é site de produção, sempre no
+  ar (o Render free dormia ~15 min e acordava em ~1 min); (2) mais volume — a
+  lista traz ~10 vagas/ciclo, não só a 1 mais recente que a api-vagas expunha.
+- **Filtro de localização (o pedido do dono, que mora em Curitiba):**
+  - `forma_trabalho == 'remoto'` → mantém (remoto Brasil, dá pra fazer daqui).
+  - `local` contém Curitiba OU região metropolitana (Pinhais, São José dos
+    Pinhais, Colombo, Araucária, Campo Largo, Fazenda Rio Grande, Almirante
+    Tamandaré, Piraquara, Quatro Barras, Campina Grande do Sul), com
+    presencial/híbrido → mantém.
+  - outra cidade presencial/híbrido (Santos, Jundiaí, BH…) → descarta.
+  - Match normalizado (minúsculo, sem acento). `local`/`link_vaga` só vêm no
+    endpoint de DETALHES, então é 1 request de lista + 1 de detalhe por vaga.
+  - **Log por ciclo:** `Meu Padrinho (estagio): N brutas → X mantidas
+    (Curitiba/remoto) + Z descartadas (outra cidade)`.
+- **Limite conhecido:** o filtro é só de LOCALIZAÇÃO, não de tipo de vaga — uma
+  remota "Freelance AI Trainer" ou uma bolsa de mestrado em Curitiba passam
+  (têm local válido). Se incomodar, dá pra reaproveitar a lógica de
+  `_filtrar_por_senioridade` como filtro de tipo aqui também.
+- **Impacto no deploy:** a api-vagas no Render virou redundante — pode desligar,
+  e o secret `JOBS_API_BASE_URL` no GitHub Actions fica sem uso (inofensivo).
 
 ## Remotive desplugado (2026-07)
 - **O que aconteceu:** a API pública do Remotive
@@ -85,10 +114,11 @@ não detalhada aqui.
   custo de um processo 24h.
 
 ## Arquitetura de deploy (final)
-- **api-vagas → Render (Web Service, free tier).** Precisa ser Web Service, não
-  Background Worker, porque o bot o consome via HTTP. Trade-off: free tier dorme
-  após ~15 min (cold start ~1 min), tratado em `jobs_api_client.py` com timeout
-  de 60s na 1ª tentativa + retry.
+- **Fonte de estágio → API do Meu Padrinho, chamada direto pelo bot** (sem serviço
+  intermediário). Acabou a dependência do Render: nada de cold start. Ver seção
+  "Meu Padrinho direto".
+  - *(Histórico: antes rodava o serviço `api-vagas` num Render Web Service free.
+    Desativado em 2026-07 — dormia após ~15 min e só dava 1 vaga/ciclo.)*
 - **bot Python → GitHub Actions (cron, 1 ciclo por execução, a cada 2h).** Não
   vira Background Worker no Render porque isso é pago ($7/mês); Actions faz o
   agendamento de graça.
@@ -96,9 +126,9 @@ não detalhada aqui.
   `.github/workflows/rodar-bot.yml` commita o `vagas.db` de volta no repo —
   apenas quando muda (i.e., quando houve vaga nova), com `[skip ci]`. Por isso o
   `vagas.db` saiu do `.gitignore` (precisa ser rastreado).
-- **Conexão entre os dois:** o bot recebe `JOBS_API_BASE_URL` como GitHub Secret,
-  apontando pra URL pública do api-vagas no Render (`https://api-vagas-xxxx.onrender.com`).
-- Secrets do Actions: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `JOBS_API_BASE_URL`.
+- Secrets do Actions: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`. O
+  `JOBS_API_BASE_URL` ficou sem uso (o bot não fala mais com o Render) — pode
+  remover do GitHub, é inofensivo se ficar.
 
 ## Riscos conhecidos (não ignorar)
 - Indeed e Gupy têm proteção anti-bot (Cloudflare, rate limiting). Usar

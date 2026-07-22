@@ -1,9 +1,9 @@
 name: rodar-bot
 
 # Agendamento do bot. GitHub roda o cron em UTC e pode ATRASAR ou pular
-# execuções sob carga (é best-effort, não tempo-real) — como cada rota do
-# api-vagas devolve só a vaga mais recente e o dedup é persistido, um atraso
-# ocasional só adia a vaga pro próximo ciclo, sem perder nada.
+# execuções sob carga (é best-effort, não tempo-real) — como o dedup é
+# persistido, um atraso ocasional só adia a vaga pro próximo ciclo, sem
+# perder nada.
 on:
   schedule:
     - cron: "0 */2 * * *"   # a cada 2h, no minuto 0 (UTC)
@@ -39,7 +39,8 @@ jobs:
           # --- SECRETS (cadastrar no painel: Settings > Secrets and variables > Actions) ---
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          JOBS_API_BASE_URL: ${{ secrets.JOBS_API_BASE_URL }}
+          # (JOBS_API_BASE_URL removido: o bot fala direto com o Meu Padrinho,
+          #  não usa mais o serviço api-vagas no Render.)
           # --- Config não-sensível (pode ajustar aqui sem mexer no código) ---
           SEARCH_KEYWORD: "estagio desenvolvimento"
           MAX_VAGAS_POR_CICLO: "8"

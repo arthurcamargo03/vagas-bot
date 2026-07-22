@@ -1,4 +1,14 @@
 """
+DEPRECADO (2026-07): substituído por `src/meupadrinho_client.py`.
+
+O bot passou a bater DIRETO na API do Meu Padrinho (sem cold start, com filtro
+de Curitiba/remoto e mais volume por ciclo), então este cliente do serviço
+api-vagas no Render saiu do pipeline (`buscar_todas_vagas` não o chama mais). A
+api-vagas no Render virou redundante e pode ser desligada. Mantido só de
+referência / caso queira voltar a usar o serviço separado.
+
+--- (documentação original abaixo) ---
+
 Cliente para o serviço api-vagas (Meu Padrinho) — fonte PRINCIPAL de estágio BR.
 
 api-vagas (https://github.com/matheusaudibert/jobs-api) é uma API Node.js
