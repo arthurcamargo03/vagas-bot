@@ -53,11 +53,12 @@ não detalhada aqui.
   - Match normalizado (minúsculo, sem acento). `local`/`link_vaga` só vêm no
     endpoint de DETALHES, então é 1 request de lista + 1 de detalhe por vaga.
   - **Log por ciclo:** `Meu Padrinho (estagio): N brutas → X mantidas
-    (Curitiba/remoto) + Z descartadas (outra cidade)`.
-- **Limite conhecido:** o filtro é só de LOCALIZAÇÃO, não de tipo de vaga — uma
-  remota "Freelance AI Trainer" ou uma bolsa de mestrado em Curitiba passam
-  (têm local válido). Se incomodar, dá pra reaproveitar a lógica de
-  `_filtrar_por_senioridade` como filtro de tipo aqui também.
+    (Curitiba/remoto) + Z fora de local + W tipo indesejado (freelance/pós)`.
+- **Filtro de TIPO (além do de local):** barra pelo título `freelance`/`freela`,
+  `mestrado`, `doutorado`, `pos-graduacao` — mesmo vindo como "estágio", não
+  serve pro canal (estágio pra graduação). Checado no título da lista, antes do
+  request de detalhe. NÃO barra `bolsa`/`bolsista` sozinhos de propósito
+  (estágio BR costuma ser "bolsa-auxílio", legítimo).
 - **Impacto no deploy:** a api-vagas no Render virou redundante — pode desligar,
   e o secret `JOBS_API_BASE_URL` no GitHub Actions fica sem uso (inofensivo).
 

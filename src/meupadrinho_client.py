@@ -7,9 +7,11 @@ pegamos a LISTA de estágios recentes e filtramos por localização/modalidade
 aqui no Python.
 
 Regra de filtro (o que interessa pra quem mora em Curitiba):
-  - `forma_trabalho == 'remoto'`                     -> mantém (remoto Brasil).
-  - Curitiba OU região metropolitana, presencial/híbrido -> mantém.
-  - outra cidade presencial/híbrido                  -> descarta.
+  - LOCAL: `forma_trabalho == 'remoto'` -> mantém (remoto Brasil); Curitiba OU
+    região metropolitana (presencial/híbrido) -> mantém; outra cidade -> descarta.
+  - TIPO: barra freelance e bolsa de pós (mestrado/doutorado/pós-graduação),
+    mesmo sendo "estágio" — o canal é estágio pra graduação. Checado no título
+    da própria lista, antes de gastar um request de detalhe.
 
 Por que trocar o api-vagas por isto (decisão 2026-07):
   - Sem cold start: o Meu Padrinho é site de produção, sempre no ar (o api-vagas
@@ -44,6 +46,15 @@ _CURITIBA_REGIAO = (
     "quatro barras", "campina grande do sul",
 )
 
+# Tipos que NÃO interessam mesmo aparecendo como "estágio": freelance avulso e
+# bolsa de pós-graduação (mestrado/doutorado). O canal é estágio pra graduação.
+# Termos JÁ normalizados (minúsculo, sem acento) — comparados por substring, o
+# que cobre variações ("freelance"/"freelancer"). NÃO incluímos "bolsa"/"bolsista"
+# sozinhos de propósito: estágio no Brasil costuma ser "bolsa-auxílio", legítimo.
+_TITULO_INDESEJADO = (
+    "freelance", "freela", "mestrado", "doutorado", "pos-graduacao",
+)
+
 
 def _normalizar(texto: str | None) -> str:
     """minúsculo + sem acento — casa 'Curitiba'/'híbrido' de forma robusta."""
@@ -63,6 +74,12 @@ def _local_interessa(local: str | None, forma_trabalho: str | None) -> bool:
         return True
     local_norm = _normalizar(local)
     return any(cidade in local_norm for cidade in _CURITIBA_REGIAO)
+
+
+def _tipo_indesejado(titulo: str | None) -> bool:
+    """True se o título indica freelance ou bolsa de pós (mestrado/doutorado)."""
+    titulo_norm = _normalizar(titulo)
+    return any(termo in titulo_norm for termo in _TITULO_INDESEJADO)
 
 
 def _get_json(url: str) -> dict:
@@ -103,13 +120,22 @@ def buscar_vagas_meupadrinho(nivel: str = "estagio") -> list[VagaEncontrada]:
 
     alvo = _normalizar(nivel)
     mantidas: list[VagaEncontrada] = []
-    descartadas = 0
+    fora_local = 0
+    tipo_ruim = 0
     for item in lista:
         # Pula encerradas e níveis que não batem com o pedido (a API às vezes
         # mistura; o campo vem como string "True"/"False").
         if str(item.get("vaga_encerrada")).lower() == "true":
             continue
         if _normalizar(item.get("nivel")) != alvo:
+            continue
+
+        # Filtro de TIPO no título da própria lista — barra freelance/pós antes
+        # de gastar um request de detalhe.
+        titulo_lista = item.get("titulo_vaga")
+        if _tipo_indesejado(titulo_lista):
+            tipo_ruim += 1
+            logger.debug("Meu Padrinho descartada (freelance/pós): %s", titulo_lista)
             continue
 
         nano_id = item.get("nano_id")
@@ -125,7 +151,7 @@ def buscar_vagas_meupadrinho(nivel: str = "estagio") -> list[VagaEncontrada]:
             time.sleep(DELAY_ENTRE_DETALHES_SEGUNDOS)
 
         if not _local_interessa(detalhes.get("local"), detalhes.get("forma_trabalho")):
-            descartadas += 1
+            fora_local += 1
             logger.debug(
                 "Meu Padrinho descartada (fora de Curitiba/remoto): %s [%s / %s]",
                 detalhes.get("titulo_vaga"), detalhes.get("local"),
@@ -138,8 +164,8 @@ def buscar_vagas_meupadrinho(nivel: str = "estagio") -> list[VagaEncontrada]:
             mantidas.append(vaga)
 
     logger.info(
-        "Meu Padrinho (%s): %d brutas → %d mantidas (Curitiba/remoto) + %d "
-        "descartadas (outra cidade).",
-        nivel, len(lista), len(mantidas), descartadas,
+        "Meu Padrinho (%s): %d brutas → %d mantidas (Curitiba/remoto) + %d fora "
+        "de local + %d tipo indesejado (freelance/pós).",
+        nivel, len(lista), len(mantidas), fora_local, tipo_ruim,
     )
     return mantidas
